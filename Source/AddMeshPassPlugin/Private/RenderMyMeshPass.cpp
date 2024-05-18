@@ -51,6 +51,15 @@ public:
 };
 IMPLEMENT_MATERIAL_SHADER_TYPE(, FMyMeshPassMaterialShaderVS, TEXT("/Plugin/Runtime/AddMeshPassPlugin/MyMeshPassMaterialShader.usf"), TEXT("VSMain"), SF_Vertex);
 
+
+struct FMyMeshPassShaderElementData : public FMeshMaterialShaderElementData
+{
+	FMyMeshPassShaderElementData() {}
+
+	FVector3f ExampleColorProperty;
+};
+
+
 class FMyMeshPassMaterialShaderPS : public FMyMeshPassMaterialShader
 {
 	DECLARE_SHADER_TYPE(FMyMeshPassMaterialShaderPS, MeshMaterial);
@@ -62,7 +71,41 @@ public:
 	FMyMeshPassMaterialShaderPS(const ShaderMetaType::CompiledShaderInitializerType& Initializer)
 		: FMyMeshPassMaterialShader(Initializer)
 	{
+		ExampleColorProperty.Bind(Initializer.ParameterMap, TEXT("ExampleColorProperty"));
 	}
+
+	void GetShaderBindings(
+		const FScene* Scene,
+		ERHIFeatureLevel::Type FeatureLevel,
+		const FPrimitiveSceneProxy* PrimitiveSceneProxy,
+		const FMaterialRenderProxy& MaterialRenderProxy,
+		const FMaterial& Material,
+		const FMyMeshPassShaderElementData& ShaderElementData,
+		FMeshDrawSingleShaderBindings& ShaderBindings) const
+	{
+		FMeshMaterialShader::GetShaderBindings(Scene, FeatureLevel, PrimitiveSceneProxy, MaterialRenderProxy, Material, ShaderElementData, ShaderBindings);
+
+		ShaderBindings.Add(ExampleColorProperty, ShaderElementData.ExampleColorProperty);
+	}
+
+	void GetElementShaderBindings(
+		const FShaderMapPointerTable& PointerTable,
+		const FScene* Scene,
+		const FSceneView* ViewIfDynamicMeshCommand,
+		const FVertexFactory* VertexFactory,
+		const EVertexInputStreamType InputStreamType,
+		const FStaticFeatureLevel FeatureLevel,
+		const FPrimitiveSceneProxy* PrimitiveSceneProxy,
+		const FMeshBatch& MeshBatch,
+		const FMeshBatchElement& BatchElement,
+		const FMyMeshPassShaderElementData& ShaderElementData,
+		FMeshDrawSingleShaderBindings& ShaderBindings,
+		FVertexInputStreamArray& VertexStreams) const
+	{
+		FMeshMaterialShader::GetElementShaderBindings(PointerTable, Scene, ViewIfDynamicMeshCommand, VertexFactory, InputStreamType, FeatureLevel, PrimitiveSceneProxy, MeshBatch, BatchElement, ShaderElementData, ShaderBindings, VertexStreams);
+	}
+
+	LAYOUT_FIELD(FShaderParameter, ExampleColorProperty);
 };
 IMPLEMENT_MATERIAL_SHADER_TYPE(, FMyMeshPassMaterialShaderPS, TEXT("/Plugin/Runtime/AddMeshPassPlugin/MyMeshPassMaterialShader.usf"), TEXT("PSMain"), SF_Pixel);
 //End Shaders
@@ -88,9 +131,12 @@ public:
 	virtual void AddMeshBatch(const FMeshBatch& RESTRICT MeshBatch, uint64 BatchElementMask, const FPrimitiveSceneProxy* RESTRICT PrimitiveSceneProxy, int32 StaticMeshId = -1) override;
 	
 	FMeshPassProcessorRenderState PassDrawRenderState;
+
+	FMyMeshPassViewExtension::FAdditionalData MyMeshPassPrimitivesData;
 };
 
 //End Mesh Pass Processor
+
 
 inline void FMyMeshPassProcessor::AddMeshBatch(const FMeshBatch& RESTRICT MeshBatch, uint64 BatchElementMask, const FPrimitiveSceneProxy* RESTRICT PrimitiveSceneProxy, int32 StaticMeshId)
 {
@@ -125,8 +171,10 @@ inline void FMyMeshPassProcessor::AddMeshBatch(const FMeshBatch& RESTRICT MeshBa
 
 			const FMeshDrawCommandSortKey SortKey = CalculateMeshStaticSortKey(PassShaders.VertexShader, PassShaders.PixelShader);
 
-			FMeshMaterialShaderElementData ShaderElementData;
+			FMyMeshPassShaderElementData ShaderElementData;
 			ShaderElementData.InitializeMeshMaterialData(ViewIfDynamicMeshCommand, PrimitiveSceneProxy, MeshBatch, -1, true);
+			ShaderElementData.ExampleColorProperty = FVector3f(MyMeshPassPrimitivesData.ExampleColorProperty.X, MyMeshPassPrimitivesData.ExampleColorProperty.Y,
+				MyMeshPassPrimitivesData.ExampleColorProperty.Z);
 
 			BuildMeshDrawCommands(
 				MeshBatch,
@@ -193,6 +241,7 @@ void FMyMeshPassViewExtension::SetupViewFamily(FSceneViewFamily& InViewFamily)
 {
 	check(IsInGameThread());
 	MyMeshPassPrimitives.Empty();
+	MyMeshPassPrimitivesData.Empty();
 	if (this->GetWorld())
 	{
 		UMyMeshPassManager* Manager = this->GetWorld()->GetSubsystem<UMyMeshPassManager>();
@@ -203,6 +252,10 @@ void FMyMeshPassViewExtension::SetupViewFamily(FSceneViewFamily& InViewFamily)
 				if (Component && Component->IsVisible())
 				{
 					MyMeshPassPrimitives.Add(Component->GetSceneProxy());
+
+					FAdditionalData Data;
+					Data.ExampleColorProperty = Component->ExampleColorProperty;
+					MyMeshPassPrimitivesData.Add(Component->GetSceneProxy(), Data);
 				}
 			}
 
@@ -271,7 +324,7 @@ void FMyMeshPassViewExtension::PostRenderBasePassDeferred_RenderThread(FRDGBuild
 	PassParameters->RenderTargets.DepthStencil = FDepthStencilBinding(DepthTexture, ERenderTargetLoadAction::EClear, ERenderTargetLoadAction::ENoAction, FExclusiveDepthStencil::DepthWrite_StencilNop);
 	
 	TArray< const FPrimitiveSceneProxy* > RenderedPrimitives = MyMeshPassPrimitives;
-
+	TMap< const FPrimitiveSceneProxy*, FAdditionalData> RenderedPrimitivesData = this->MyMeshPassPrimitivesData;
 	AddSimpleMeshPass(
 		GraphBuilder, 
 		PassParameters, 
@@ -280,11 +333,15 @@ void FMyMeshPassViewExtension::PostRenderBasePassDeferred_RenderThread(FRDGBuild
 		nullptr, 
 		RDG_EVENT_NAME("RenderMyMeshPass"), 
 		View.UnscaledViewRect,
-		[View, RenderedPrimitives](FDynamicPassMeshDrawListContext* DynamicMeshPassContext)
+		[View, RenderedPrimitives, RenderedPrimitivesData](FDynamicPassMeshDrawListContext* DynamicMeshPassContext)
 	{
 		FMyMeshPassProcessor PassMeshProcessor(nullptr, &View, DynamicMeshPassContext);
 		for (const FPrimitiveSceneProxy* primitive : RenderedPrimitives)
 		{
+			if (primitive == nullptr)
+			{
+				continue;
+			}
 			const FStaticMeshSceneProxy* MeshProxy = static_cast<const FStaticMeshSceneProxy*>(primitive);
 			int32 LODIndex = 0;
 			TArray<FMeshBatch> MeshElements;
@@ -293,6 +350,7 @@ void FMyMeshPassViewExtension::PostRenderBasePassDeferred_RenderThread(FRDGBuild
 			{
 				continue;
 			}
+			PassMeshProcessor.MyMeshPassPrimitivesData = RenderedPrimitivesData[primitive];
 			PassMeshProcessor.AddMeshBatch(MeshElements[0], 1, primitive);
 		}
 	});

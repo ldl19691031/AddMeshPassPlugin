@@ -27,6 +27,8 @@ void VSMain(
 	Output.Position = mul(RasterizedWorldPosition, ResolvedView.TranslatedWorldToClip);
 }
 
+float3 ExampleColorProperty;
+
 void PSMain(
 	FRenderMyMeshVSToPS Interpolants
 	OPTIONAL_IsFrontFace,
@@ -44,5 +46,5 @@ void PSMain(
 
 	//In the case if you need access material parameters
     float3 BaseColor = GetMaterialBaseColor(PixelMaterialInputs);
-    OutColor = float4(BaseColor, 1.0f);
+    OutColor = float4(BaseColor + ExampleColorProperty, 1.0f);
 }

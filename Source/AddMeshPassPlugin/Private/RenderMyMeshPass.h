@@ -49,8 +49,16 @@ public:
 	virtual bool IsActiveThisFrame_Internal(const FSceneViewExtensionContext& Context) const override;
 	// End FSceneViewExtensionBase implementation
 
+	struct FAdditionalData {
+		FVector ExampleColorProperty;
+	};
+
 private:
 	TArray< const FPrimitiveSceneProxy* > MyMeshPassPrimitives;
+
+
+
+	TMap<const FPrimitiveSceneProxy*, FAdditionalData> MyMeshPassPrimitivesData;
 
 	FTextureRenderTargetResource* MyMeshPassOutputRTResource;
 };
@@ -63,4 +71,7 @@ public:
 	//override OnRegister and OnUnregister
 	virtual void OnRegister() override;
 	virtual void OnUnregister() override;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "MyMeshPass")
+	FVector ExampleColorProperty;
 };
