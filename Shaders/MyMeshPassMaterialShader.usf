@@ -1,0 +1,48 @@
+#include "/Engine/Private/Common.ush"
+#include "/Engine/Generated/Material.ush"
+#include "/Engine/Generated/VertexFactory.ush"
+
+struct FRenderMyMeshVSToPS
+{
+    FVertexFactoryInterpolantsVSToPS FactoryInterpolants;
+    float4 Position : SV_POSITION;
+};
+
+/** Simple default vertex shader. */
+void VSMain(
+	FVertexFactoryInput Input,
+	out FRenderMyMeshVSToPS Output
+)
+{
+	ResolvedView = ResolveView();
+	FVertexFactoryIntermediates VFIntermediates = GetVertexFactoryIntermediates(Input);
+	float4 WorldPosition = VertexFactoryGetWorldPosition(Input, VFIntermediates);
+
+	half3x3 TangentToLocal = VertexFactoryGetTangentToLocal(Input, VFIntermediates);
+	FMaterialVertexParameters VertexParameters = GetMaterialVertexParameters(Input, VFIntermediates, WorldPosition.xyz, TangentToLocal);
+	Output.FactoryInterpolants = VertexFactoryGetInterpolantsVSToPS(Input, VFIntermediates, VertexParameters);
+
+	WorldPosition.xyz += GetMaterialWorldPositionOffset(VertexParameters);
+	float4 RasterizedWorldPosition = VertexFactoryGetRasterizedWorldPosition(Input, VFIntermediates, WorldPosition);
+	Output.Position = mul(RasterizedWorldPosition, ResolvedView.TranslatedWorldToClip);
+}
+
+void PSMain(
+	FRenderMyMeshVSToPS Interpolants
+	OPTIONAL_IsFrontFace,
+	out HALF4_TYPE OutColor : SV_Target0
+)
+{
+    ResolvedView = ResolveView();
+
+    float4 SvPosition = Interpolants.Position;
+    FMaterialPixelParameters MaterialParameters = GetMaterialPixelParameters(Interpolants.FactoryInterpolants, SvPosition);
+
+    FPixelMaterialInputs PixelMaterialInputs;
+    CalcMaterialParameters(MaterialParameters, PixelMaterialInputs, SvPosition, bIsFrontFace);
+    GetMaterialCoverageAndClipping(MaterialParameters, PixelMaterialInputs);
+
+	//In the case if you need access material parameters
+    float3 BaseColor = GetMaterialBaseColor(PixelMaterialInputs);
+    OutColor = float4(BaseColor, 1.0f);
+}
