@@ -12,6 +12,8 @@
 
 This is the sample project of [this article](https://golden-mandolin-675.notion.site/Add-a-Mesh-Pass-without-Touching-Unreal-Engine-Source-Code-fe105e36f9a649b18b37b8fa46c687ee). If you want to know more, please read that article.
 
+[Here](https://github.com/ldl19691031/AddMeshPassPlugin/blob/main/Docs/Add%20a%20Mesh%20Pass%20without%20Touching%20Unreal%20Engine%20Sou%20fe105e36f9a649b18b37b8fa46c687ee.md) is a copy of my blog, if you have trouble to access Notion website.
+
 The project shows that you can use AddSimpleMeshPass function to render the meshes you want, with your custom shaders, no need to touch engine source code.
 
 I use this as a graphics prototype tool in Unreal Engine. Don't use this in production.
