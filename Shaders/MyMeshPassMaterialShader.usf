@@ -29,6 +29,95 @@ void VSMain(
 
 float3 ExampleColorProperty;
 
+static const float LineWidth = 2.0f;
+
+void ProcessEdge(float4 clipA, float4 clipB, FVertexFactoryInterpolantsVSToPS dataA, FVertexFactoryInterpolantsVSToPS dataB, float2 viewportSize, inout TriangleStream<FRenderMyMeshVSToPS> TriStream)
+{
+    float3 ndcA = clipA.xyz / clipA.w;
+    float3 ndcB = clipB.xyz / clipB.w;
+
+    float2 screenA;
+    float2 screenB;
+    screenA.x = (ndcA.x * 0.5f + 0.5f) * viewportSize.x;
+    screenA.y = (ndcA.y * -0.5f + 0.5f) * viewportSize.y;
+    screenB.x = (ndcB.x * 0.5f + 0.5f) * viewportSize.x;
+    screenB.y = (ndcB.y * -0.5f + 0.5f) * viewportSize.y;
+
+    float2 dirScreen = normalize(screenB - screenA); 
+    float2 normalScreen = float2(-dirScreen.y, dirScreen.x);
+
+    float halfWidth = 0.5f * LineWidth;
+    float capLength = halfWidth;
+
+    float2 A_top = screenA + normalScreen * halfWidth;
+    float2 A_bottom = screenA - normalScreen * halfWidth;
+    float2 B_top = screenB + normalScreen * halfWidth;
+    float2 B_bottom = screenB - normalScreen * halfWidth;
+    float2 A_tip = screenA - dirScreen * capLength;
+    float2 B_tip = screenB + dirScreen * capLength;
+
+    float2 pixelToNDC = float2(2.0f / viewportSize.x, -2.0f / viewportSize.y);
+
+#define ScreenToClip(screenPos, origPosition) float4( \
+            ( (screenPos.x / viewportSize.x) * 2 - 1 ) * origPosition.w, \
+            ( (1 - screenPos.y / viewportSize.y) * 2 - 1 ) * origPosition.w, \
+            origPosition.z, origPosition.w )
+
+
+    FRenderMyMeshVSToPS v;
+    float4 clip_A_top = ScreenToClip(A_top, clipA);
+    float4 clip_A_bottom = ScreenToClip(A_bottom, clipA);
+    float4 clip_A_tip = ScreenToClip(A_tip, clipA);
+    float4 clip_A = clipA; 
+
+
+    float4 clip_B_top = ScreenToClip(B_top, clipB);
+    float4 clip_B_bottom = ScreenToClip(B_bottom, clipB);
+    float4 clip_B_tip = ScreenToClip(B_tip, clipB);
+    float4 clip_B = clipB; 
+
+
+    v.Position = clip_A_top;
+    v.FactoryInterpolants = dataA;
+    TriStream.Append(v);
+    v.Position = clip_B_top;
+    v.FactoryInterpolants = dataB;
+    TriStream.Append(v);
+    v.Position = clip_B_bottom;
+    v.FactoryInterpolants = dataB;
+    TriStream.Append(v);
+    TriStream.RestartStrip();
+
+    v.Position = clip_A_top;
+    v.FactoryInterpolants = dataA;
+    TriStream.Append(v);
+    v.Position = clip_B_bottom;
+    v.FactoryInterpolants = dataB;
+    TriStream.Append(v);
+    v.Position = clip_A_bottom;
+    v.FactoryInterpolants = dataA;
+    TriStream.Append(v);
+    TriStream.RestartStrip();
+
+}
+
+[maxvertexcount(18)]
+void GSMain(triangle FRenderMyMeshVSToPS inputTri[3], inout TriangleStream<FRenderMyMeshVSToPS> TriStream)
+{
+    float4 clip0 = inputTri[0].Position;
+    FVertexFactoryInterpolantsVSToPS data0 = inputTri[0].FactoryInterpolants;
+    
+    float4 clip1 = inputTri[1].Position;
+    FVertexFactoryInterpolantsVSToPS data1 = inputTri[1].FactoryInterpolants;
+    
+    float4 clip2 = inputTri[2].Position;
+    FVertexFactoryInterpolantsVSToPS data2 = inputTri[2].FactoryInterpolants;
+
+    float2 viewportSize = View.ViewSizeAndInvSize.xy;
+    ProcessEdge(clip0, clip1, data0, data1, viewportSize, TriStream);
+    ProcessEdge(clip1, clip2, data1, data2, viewportSize, TriStream);
+    ProcessEdge(clip2, clip0, data2, data0, viewportSize, TriStream);
+}
 void PSMain(
 	FRenderMyMeshVSToPS Interpolants
 	OPTIONAL_IsFrontFace,

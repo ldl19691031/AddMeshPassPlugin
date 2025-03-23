@@ -52,6 +52,26 @@ public:
 IMPLEMENT_MATERIAL_SHADER_TYPE(, FMyMeshPassMaterialShaderVS, TEXT("/Plugin/Runtime/AddMeshPassPlugin/MyMeshPassMaterialShader.usf"), TEXT("VSMain"), SF_Vertex);
 
 
+class FMyMeshPassMaterialShaderGS : public FMyMeshPassMaterialShader
+{
+	DECLARE_SHADER_TYPE(FMyMeshPassMaterialShaderGS, MeshMaterial);
+public:		
+	FMyMeshPassMaterialShaderGS()
+	{}
+
+	  FMyMeshPassMaterialShaderGS(const FMeshMaterialShaderType::CompiledShaderInitializerType& Initializer)
+		  : FMyMeshPassMaterialShader(Initializer)
+	  {
+	  }
+	  static bool ShouldCompilePermutation(const FMeshMaterialShaderPermutationParameters& Parameters)
+	  {
+		  return IsFeatureLevelSupported(Parameters.Platform, ERHIFeatureLevel::SM5);
+	  }
+};
+
+IMPLEMENT_MATERIAL_SHADER_TYPE(, FMyMeshPassMaterialShaderGS, TEXT("/Plugin/Runtime/AddMeshPassPlugin/MyMeshPassMaterialShader.usf"), TEXT("GSMain"), SF_Geometry);
+
+
 struct FMyMeshPassShaderElementData : public FMeshMaterialShaderElementData
 {
 	FMyMeshPassShaderElementData() {}
@@ -150,11 +170,13 @@ inline void FMyMeshPassProcessor::AddMeshBatch(const FMeshBatch& RESTRICT MeshBa
 
 			TMeshProcessorShaders<
 				FMyMeshPassMaterialShaderVS,
+				FMyMeshPassMaterialShaderGS,
 				FMyMeshPassMaterialShaderPS> PassShaders;
 
 			FMaterialShaderTypes ShaderTypes;
 			ShaderTypes.AddShaderType<FMyMeshPassMaterialShaderVS>();
 			ShaderTypes.AddShaderType<FMyMeshPassMaterialShaderPS>();
+			ShaderTypes.AddShaderType<FMyMeshPassMaterialShaderGS>();
 
 			FMaterialShaders Shaders;
 			if (!Material->TryGetShaders(ShaderTypes, VertexFactory->GetType(), Shaders))
@@ -164,6 +186,7 @@ inline void FMyMeshPassProcessor::AddMeshBatch(const FMeshBatch& RESTRICT MeshBa
 			}
 			Shaders.TryGetVertexShader(PassShaders.VertexShader);
 			Shaders.TryGetPixelShader(PassShaders.PixelShader);
+			Shaders.TryGetGeometryShader(PassShaders.GeometryShader);
 
 			const FMeshDrawingPolicyOverrideSettings OverrideSettings = ComputeMeshOverrideSettings(MeshBatch);
 			const ERasterizerFillMode MeshFillMode = ComputeMeshFillMode(*Material, OverrideSettings);
